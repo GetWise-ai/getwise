@@ -667,10 +667,6 @@ async function runAnalysis() {
     document.getElementById('output').style.display = 'none';
     return;
   }
-  // Sanitize user input so quotes don't break the prompt string
-  const their = theirRaw.replace(/\\/g, '\\\\').replace(/`/g, "'").replace(/"/g, '\\"');
-  const mine = mineRaw.replace(/\\/g, '\\\\').replace(/`/g, "'").replace(/"/g, '\\"');
-
   const btn = document.getElementById('abtn');
   btn.disabled = true;
   const ra = document.getElementById('result');
@@ -679,22 +675,27 @@ async function runAnalysis() {
   document.getElementById('loading-msg').textContent = 'Analyzing negotiation dynamics...';
   document.getElementById('output').style.display = 'none';
 
-  const prompt = `You are an expert negotiation strategist. Analyze this negotiation. Reply ONLY with valid JSON — no markdown, no backticks, no preamble.
-
-Their statement: "${their}"
-My situation: "${mine}"
-
-JSON format:
-{
-  "leverage_score": <integer 1-100>,
-  "tactics": [
-    {"type":"open","title":"<tactic name>","line":"<exact words to say>"},
-    {"type":"counter","title":"<tactic name>","line":"<exact words to say>"},
-    {"type":"close","title":"<tactic name>","line":"<exact words to say>"}
-  ],
-  "pressure_points": ["<point 1>","<point 2>","<point 3>"],
-  "watch_out": ["<trap 1>","<trap 2>","<trap 3>"]
-}`;
+  // Build prompt safely — theirRaw/mineRaw injected via JSON.stringify so
+  // quotes, apostrophes, newlines, etc. can never corrupt the payload
+  const prompt = [
+    "You are an expert negotiation strategist. Analyze this negotiation.",
+    "Reply ONLY with valid JSON — no markdown, no backticks, no preamble.",
+    "",
+    "Their statement: " + JSON.stringify(theirRaw),
+    "My situation: " + JSON.stringify(mineRaw),
+    "",
+    'Return exactly this JSON shape:',
+    '{',
+    '  "leverage_score": <integer 1-100>,',
+    '  "tactics": [',
+    '    {"type":"open","title":"<tactic name>","line":"<exact words to say>"},',
+    '    {"type":"counter","title":"<tactic name>","line":"<exact words to say>"},',
+    '    {"type":"close","title":"<tactic name>","line":"<exact words to say>"}',
+    '  ],',
+    '  "pressure_points": ["<point 1>","<point 2>","<point 3>"],',
+    '  "watch_out": ["<trap 1>","<trap 2>","<trap 3>"]',
+    '}'
+  ].join('\n');
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -729,7 +730,9 @@ JSON format:
     document.getElementById('plist').innerHTML = d.pressure_points.map(p => `<li>${p}</li>`).join('');
     document.getElementById('wlist').innerHTML = d.watch_out.map(w => `<li>${w}</li>`).join('');
   } catch(e) {
-    document.getElementById('loading-msg').textContent = 'Something went wrong. Try again.';
+    document.getElementById('loading-msg').textContent = 'Error: ' + (e.message || 'Something went wrong. Try again.');
+    document.getElementById('loading-msg').style.display = 'block';
+    document.getElementById('output').style.display = 'none';
   } finally {
     btn.disabled = false;
   }
